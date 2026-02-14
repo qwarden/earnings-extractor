@@ -21,18 +21,18 @@ async function getKey(): Promise<CryptoKey> {
   );
 }
 
-function bufToBase64url(buf: ArrayBuffer): string {
+function bufToBase64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+  return btoa(binary);
 }
 
 async function sign(value: string): Promise<string> {
   const key = await getKey();
   const encoder = new TextEncoder();
   const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(value));
-  return `${value}${SIGNATURE_SEP}${bufToBase64url(sig)}`;
+  return `${value}${SIGNATURE_SEP}${bufToBase64(sig)}`;
 }
 
 async function verify(signed: string): Promise<boolean> {
@@ -40,7 +40,6 @@ async function verify(signed: string): Promise<boolean> {
   if (sep === -1) return false;
   const value = signed.slice(0, sep);
   const expected = await sign(value);
-  // Constant-time comparison by checking every character
   if (expected.length !== signed.length) return false;
   let result = 0;
   for (let i = 0; i < expected.length; i++) {
