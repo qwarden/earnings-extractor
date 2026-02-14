@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ExtractedData, ValidationResult } from "@/lib/types";
 
@@ -8,6 +8,12 @@ interface ResultRow {
   filename: string;
   data: ExtractedData;
   validation?: ValidationResult;
+}
+
+interface FileProgress {
+  filename: string;
+  status: "pending" | "processing" | "done" | "error";
+  error?: string;
 }
 
 interface EditingCell {
@@ -34,16 +40,84 @@ const NUMERIC_FIELDS: Set<keyof ExtractedData> = new Set([
 
 const MAX_FILE_SIZE_MB = 20;
 const MAX_FILES_PER_REQUEST = 10;
+const CONCURRENCY = 5;
+const RESULTS_KEY = "extractionResults";
+const PROGRESS_KEY = "extractionProgress";
+
+function saveResults(data: ResultRow[]) {
+  try { localStorage.setItem(RESULTS_KEY, JSON.stringify(data)); } catch {}
+}
+
+function saveProgress(data: FileProgress[]) {
+  try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(data)); } catch {}
+}
+
+function friendlyError(msg: string): string {
+  const lower = msg.toLowerCase();
+  if (lower.includes("rate limit") || lower.includes("429"))
+    return "Rate limited — please wait a moment and try again";
+  if (lower.includes("401") || lower.includes("api key") || lower.includes("unauthorized"))
+    return "API authentication error — check server configuration";
+  if (lower.includes("timeout") || lower.includes("timed out"))
+    return "Request timed out — try again";
+  if (lower.includes("network")) return "Network error — check your connection";
+  if (lower.includes("parse") || lower.includes("json"))
+    return "Failed to parse extraction results";
+  const cleaned = msg.replace(/\{[\s\S]*\}/g, "").trim();
+  if (cleaned.length > 120) return cleaned.slice(0, 117) + "...";
+  return cleaned || "Extraction failed";
+}
+
+function formatValue(key: keyof ExtractedData, value: unknown) {
+  if (value === null || value === undefined) return "N/A";
+  if (key === "earnings_per_share" && typeof value === "number")
+    return `$${value.toFixed(2)}`;
+  if (key === "gross_margin" && typeof value === "number")
+    return `${Math.round(value * 100)}%`;
+  return String(value);
+}
 
 export default function Home() {
   const [results, setResults] = useState<ResultRow[]>([]);
   const [processing, setProcessing] = useState(false);
-  const [fileCount, setFileCount] = useState(0);
+  const [fileProgress, setFileProgress] = useState<FileProgress[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [editing, setEditing] = useState<EditingCell | null>(null);
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Restore persisted state on mount
+  useEffect(() => {
+    try {
+      const savedResults = localStorage.getItem(RESULTS_KEY);
+      if (savedResults) setResults(JSON.parse(savedResults));
+    } catch {}
+
+    try {
+      const savedProgress = localStorage.getItem(PROGRESS_KEY);
+      if (savedProgress) {
+        const restored: FileProgress[] = JSON.parse(savedProgress);
+        const updated = restored.map((fp) =>
+          fp.status !== "done"
+            ? { ...fp, status: "error" as const, error: "Interrupted — re-upload to retry" }
+            : fp
+        );
+        if (updated.length > 0) {
+          setFileProgress(updated);
+          saveProgress(updated);
+        }
+      }
+    } catch {}
+  }, []);
+
+  // Warn before navigating away during processing
+  useEffect(() => {
+    if (!processing) return;
+    const handler = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [processing]);
 
   const handleLogout = async () => {
     await fetch("/api/auth", { method: "DELETE" });
@@ -51,56 +125,128 @@ export default function Home() {
     router.refresh();
   };
 
-  const handleFiles = useCallback(async (files: FileList | File[]) => {
-    const allFiles = Array.from(files);
-    const pdfFiles = allFiles.filter((f) => f.type === "application/pdf");
-    if (pdfFiles.length === 0) {
-      setError("Please upload PDF files.");
-      return;
-    }
-
-    if (pdfFiles.length > MAX_FILES_PER_REQUEST) {
-      setError(`Maximum ${MAX_FILES_PER_REQUEST} files per upload.`);
-      return;
-    }
-
-    const oversized = pdfFiles.filter(
-      (f) => f.size > MAX_FILE_SIZE_MB * 1024 * 1024
-    );
-    if (oversized.length > 0) {
-      setError(
-        `Files too large (max ${MAX_FILE_SIZE_MB}MB): ${oversized.map((f) => f.name).join(", ")}`
-      );
-      return;
-    }
-
-    setProcessing(true);
-    setFileCount(pdfFiles.length);
-    setError(null);
-
-    const formData = new FormData();
-    pdfFiles.forEach((f) => formData.append("files", f));
-
-    try {
-      const res = await fetch("/api/extract", {
-        method: "POST",
-        body: formData,
+  const updateFileProgress = useCallback(
+    (index: number, update: Partial<FileProgress>) => {
+      setFileProgress((prev) => {
+        const next = [...prev];
+        next[index] = { ...next[index], ...update };
+        saveProgress(next);
+        return next;
       });
+    },
+    []
+  );
 
-      if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.error || "Extraction failed");
+  const processOneFile = useCallback(
+    async (file: File, index: number): Promise<ResultRow | null> => {
+      const formData = new FormData();
+      formData.append("files", file);
+
+      updateFileProgress(index, { status: "processing" });
+
+      try {
+        const res = await fetch("/api/extract", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!res.ok) {
+          let msg = "Extraction failed";
+          try {
+            msg = (await res.json()).error || msg;
+          } catch {}
+          updateFileProgress(index, { status: "error", error: msg });
+          return null;
+        }
+
+        const rows: ResultRow[] = await res.json();
+        updateFileProgress(index, { status: "done" });
+        return rows[0] ?? null;
+      } catch {
+        updateFileProgress(index, { status: "error", error: "Request failed" });
+        return null;
+      }
+    },
+    [updateFileProgress]
+  );
+
+  const handleFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const allFiles = Array.from(files);
+      const pdfFiles = allFiles.filter((f) => f.type === "application/pdf");
+      if (pdfFiles.length === 0) {
+        setError("Please upload PDF files.");
+        return;
       }
 
-      const data: ResultRow[] = await res.json();
-      setResults((prev) => [...prev, ...data]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
-    } finally {
+      if (pdfFiles.length > MAX_FILES_PER_REQUEST) {
+        setError(`Maximum ${MAX_FILES_PER_REQUEST} files per upload.`);
+        return;
+      }
+
+      const oversized = pdfFiles.filter(
+        (f) => f.size > MAX_FILE_SIZE_MB * 1024 * 1024
+      );
+      if (oversized.length > 0) {
+        setError(
+          `Files too large (max ${MAX_FILE_SIZE_MB}MB): ${oversized.map((f) => f.name).join(", ")}`
+        );
+        return;
+      }
+
+      setProcessing(true);
+      setError(null);
+
+      const progress: FileProgress[] = pdfFiles.map((f) => ({
+        filename: f.name,
+        status: "pending" as const,
+      }));
+      setFileProgress(progress);
+      saveProgress(progress);
+
+      const newResults: (ResultRow | null)[] = new Array(pdfFiles.length);
+      let nextIndex = 0;
+
+      async function worker() {
+        while (nextIndex < pdfFiles.length) {
+          const i = nextIndex++;
+          newResults[i] = await processOneFile(pdfFiles[i], i);
+        }
+      }
+
+      const workers = Array.from(
+        { length: Math.min(CONCURRENCY, pdfFiles.length) },
+        () => worker()
+      );
+      await Promise.all(workers);
+
+      const successful = newResults.filter(
+        (r): r is ResultRow => r !== null
+      );
+      setResults((prev) => {
+        const next = [...prev, ...successful];
+        saveResults(next);
+        return next;
+      });
+
+      setFileProgress((prev) => {
+        const failed = prev.filter((fp) => fp.status === "error");
+        if (failed.length > 0) {
+          const details = failed
+            .map((fp) => `${fp.filename}: ${friendlyError(fp.error || "Extraction failed")}`)
+            .join("\n");
+          setError(details);
+          saveProgress(prev);
+          return prev;
+        }
+        saveProgress([]);
+        return [];
+      });
+
       setProcessing(false);
-      setFileCount(0);
-    }
-  }, []);
+    },
+    [processOneFile]
+  );
 
   const handleExport = async () => {
     const res = await fetch("/api/export", {
@@ -137,25 +283,10 @@ export default function Home() {
       }
 
       updated[rowIndex] = row;
+      saveResults(updated);
       return updated;
     });
     setEditing(null);
-  };
-
-  const getRawValue = (key: keyof ExtractedData, value: unknown): string => {
-    if (value === null || value === undefined) return "";
-    return String(value);
-  };
-
-  const formatValue = (key: keyof ExtractedData, value: unknown) => {
-    if (value === null || value === undefined) return "N/A";
-    if (key === "earnings_per_share" && typeof value === "number") {
-      return `$${value.toFixed(2)}`;
-    }
-    if (key === "gross_margin" && typeof value === "number") {
-      return `${Math.round(value * 100)}%`;
-    }
-    return String(value);
   };
 
   return (
@@ -164,7 +295,8 @@ export default function Home() {
         <h1 className="text-2xl font-semibold">Earnings Data Extractor</h1>
         <button
           onClick={handleLogout}
-          className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+          disabled={processing}
+          className="text-sm text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Logout
         </button>
@@ -188,31 +320,64 @@ export default function Home() {
       <div
         onDragOver={(e) => {
           e.preventDefault();
-          setDragOver(true);
+          if (!processing) setDragOver(true);
         }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => {
           e.preventDefault();
           setDragOver(false);
-          handleFiles(e.dataTransfer.files);
+          if (!processing) handleFiles(e.dataTransfer.files);
         }}
-        className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors ${
-          dragOver
-            ? "border-blue-500 bg-blue-50"
-            : "border-gray-300 hover:border-gray-400"
+        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+          processing
+            ? "border-gray-200 cursor-default"
+            : dragOver
+              ? "border-blue-500 bg-blue-50 cursor-pointer"
+              : "border-gray-300 hover:border-gray-400 cursor-pointer"
         }`}
-        onClick={() => fileInputRef.current?.click()}
+        onClick={() => !processing && fileInputRef.current?.click()}
       >
-        {processing ? (
-          <div className="text-gray-500">
-            <div className="animate-spin inline-block w-6 h-6 border-2 border-gray-300 border-t-blue-500 rounded-full mb-3" />
-            <p>
-              Extracting data from {fileCount}{" "}
-              {fileCount === 1 ? "PDF" : "PDFs"}...
-            </p>
+        {processing || fileProgress.length > 0 ? (
+          <div className="space-y-2 text-left">
+            {fileProgress.map((fp, i) => (
+              <div key={i} className="flex items-center justify-between gap-3">
+                <span className="text-sm text-gray-700 truncate">
+                  {fp.filename}
+                </span>
+                <span
+                  className={`text-xs font-medium shrink-0 ${
+                    fp.status === "pending"
+                      ? "text-gray-400"
+                      : fp.status === "processing"
+                        ? "text-blue-600 animate-pulse"
+                        : fp.status === "done"
+                          ? "text-green-600"
+                          : "text-red-600"
+                  }`}
+                >
+                  {fp.status === "pending" && "Waiting..."}
+                  {fp.status === "processing" && "Processing..."}
+                  {fp.status === "done" && "Done"}
+                  {fp.status === "error" && friendlyError(fp.error || "Extraction failed")}
+                </span>
+              </div>
+            ))}
+            {!processing && fileProgress.some((fp) => fp.status === "error") && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFileProgress([]);
+                  saveProgress([]);
+                  fileInputRef.current?.click();
+                }}
+                className="text-xs font-medium text-blue-600 hover:text-blue-800 mt-2"
+              >
+                Retry
+              </button>
+            )}
           </div>
         ) : (
-          <div className="text-gray-500">
+          <div className="text-gray-500 py-4">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="32"
@@ -242,7 +407,7 @@ export default function Home() {
       {/* Error banner */}
       {error && (
         <div className="mt-4 flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-          <span className="flex-1">{error}</span>
+          <span className="flex-1 whitespace-pre-line">{error}</span>
           <button
             onClick={() => setError(null)}
             className="text-red-400 hover:text-red-600 shrink-0"
@@ -276,7 +441,7 @@ export default function Home() {
             </h2>
             <div className="flex items-center gap-3">
               <button
-                onClick={() => setResults([])}
+                onClick={() => { setResults([]); saveResults([]); }}
                 className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
               >
                 Clear
@@ -364,21 +529,18 @@ export default function Home() {
                           {isEditing ? (
                             <input
                               autoFocus
-                              defaultValue={getRawValue(
-                                f.key,
-                                row.data[f.key]
-                              )}
+                              defaultValue={
+                                row.data[f.key] === null || row.data[f.key] === undefined
+                                  ? ""
+                                  : String(row.data[f.key])
+                              }
                               className="font-medium text-right w-full min-w-0 bg-white border border-gray-300 rounded px-2 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                               onBlur={(e) =>
                                 commitEdit(i, f.key, e.target.value)
                               }
                               onKeyDown={(e) => {
                                 if (e.key === "Enter") {
-                                  commitEdit(
-                                    i,
-                                    f.key,
-                                    e.currentTarget.value
-                                  );
+                                  commitEdit(i, f.key, e.currentTarget.value);
                                 } else if (e.key === "Escape") {
                                   setEditing(null);
                                 }

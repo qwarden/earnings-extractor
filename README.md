@@ -31,7 +31,7 @@ Open [http://localhost:3000](http://localhost:3000), upload a PDF, and the tool 
 
 ## Approach
 
-This project was built with heavy use of Claude Code (Anthropic's AI coding tool). I used it to scaffold, implement, and iterate on the entire codebase. My role was directing the approach, making product decisions, reviewing output, and catching issues — essentially working like a tech lead with a very fast junior engineer.
+This project was built with heavy use of Claude Code (Anthropic's AI coding tool). I used it to scaffold, implement, and iterate on the entire codebase. My role was directing the approach, making product decisions, reviewing output, and catching issues.
 
 **Why LLM extraction:** The input is unstructured — earnings call transcripts and quarterly update PDFs with varying formats across companies. There's no consistent template to parse against. LLM extraction felt like the only realistic path for handling that kind of variability without building per-company parsers.
 
@@ -70,11 +70,15 @@ Next.js App (TypeScript, Tailwind CSS)
 
 - **Inline editing before export**: LLM extraction won't be 100% accurate. Rather than forcing users to fix things in Excel after the fact, they can click any value and correct it in the browser before exporting. This felt important given the client's team is currently doing manual data entry — the tool should reduce their work, not create a different kind of it.
 
-- **Card layout instead of a wide table**: 9+ data columns in a table means horizontal scrolling. Cards show one file per card with a label/value grid that's easier to scan.
+- **Text-first extraction with vision fallback**: The tool tries cheap text extraction first, then falls back to sending the full PDF to Claude's document understanding only when needed (text too short, or too many fields came back empty). This keeps API costs low for well-formatted transcripts while still handling image-heavy or complex-layout PDFs.
 
-- **CSV export matching the client's format**: Column headers and value formatting (EPS as `$1.59`, gross margin as `51%`) match the style of the provided sample spreadsheet. CSV was chosen over XLSX because it opens everywhere and doesn't require extra dependencies.
+- **Password auth**: The problem statement mentions a single client team. A shared password is appropriate for that scope.
 
-- **Password auth**: The problem statement mentions a single client team. A shared password is appropriate for that scope — no need for a user management system.
+- **Per-file progress tracking**: Extraction takes 10–30 seconds per file, so each file shows its own status rather than a single spinner for the whole batch. Up to 5 files process concurrently.
+
+- **Friendly error surfacing**: Server-side errors (rate limits, API failures) are translated into plain-language messages shown next to the file that failed, rather than only appearing in server logs.
+
+- **Interrupted upload recovery**: If the page reloads mid-processing, incomplete files are marked as "Interrupted" with a Retry button. A lightweight alternative to a server-side job queue, which would be overkill for this use case.
 
 ## What I'd Do With More Time
 
@@ -82,9 +86,7 @@ Next.js App (TypeScript, Tailwind CSS)
 
 - **Confidence scoring**: Have the LLM flag fields it's uncertain about so the UI can highlight them for manual review. Right now every field looks the same whether the model is confident or guessing.
 
-- **Result persistence**: Currently results are lost on page refresh. Adding a simple database (SQLite or similar) would let users come back to previous extractions.
-
-- **Streaming progress**: Right now the UI shows a spinner until all files in a batch are done. Streaming individual file results as they complete would be a better experience for larger batches.
+- **Full result persistence**: Completed results survive a reload via localStorage, but there's no durable storage. A simple database (SQLite or similar) would let users come back to previous extractions across sessions and devices.
 
 - **More validation**: Cross-check relationships between fields (e.g., operating income should be less than revenue, operating expenses + operating income should roughly equal revenue). Flag extractions that don't pass basic accounting identities.
 
