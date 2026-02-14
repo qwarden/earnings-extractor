@@ -16,6 +16,8 @@ docker compose up --build
 
 Open [http://localhost:3000](http://localhost:3000), upload a PDF, and the tool extracts company name, quarter, revenue, EPS, net income, operating income, gross margin, operating expenses, and buyback/dividend info.
 
+Sample earnings PDFs are in the `samples/` folder for testing.
+
 ### Environment Variables
 
 | Variable | Required | Default | Description |
