@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { extractFromPDF } from "@/lib/llm-extractor";
 import { validateExtraction } from "@/lib/validator";
 
-const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE_MB || "20", 10) * 1024 * 1024;
+const MAX_FILE_SIZE = parseInt(process.env.NEXT_PUBLIC_MAX_FILE_SIZE_MB || "20", 10) * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
   const formData = await request.formData();

@@ -33,9 +33,8 @@ const FIELD_LABELS: { key: keyof ExtractedData; label: string }[] = [
   { key: "buybacks_and_dividends", label: "Buybacks & Dividends" },
 ];
 
-const MAX_FILE_SIZE_MB = 20;
+const MAX_FILE_SIZE_MB = parseInt(process.env.NEXT_PUBLIC_MAX_FILE_SIZE_MB || "20", 10);
 const MAX_FILES_PER_REQUEST = 10;
-const CONCURRENCY = 5;
 const RESULTS_KEY = "extractionResults";
 const PROGRESS_KEY = "extractionProgress";
 
@@ -195,21 +194,9 @@ export default function Home() {
       setFileProgress(progress);
       saveProgress(progress);
 
-      const newResults: (ResultRow | null)[] = new Array(pdfFiles.length);
-      let nextIndex = 0;
-
-      async function worker() {
-        while (nextIndex < pdfFiles.length) {
-          const i = nextIndex++;
-          newResults[i] = await processOneFile(pdfFiles[i], i);
-        }
-      }
-
-      const workers = Array.from(
-        { length: Math.min(CONCURRENCY, pdfFiles.length) },
-        () => worker()
+      const newResults = await Promise.all(
+        pdfFiles.map((file, i) => processOneFile(file, i))
       );
-      await Promise.all(workers);
 
       const successful = newResults.filter(
         (r): r is ResultRow => r !== null

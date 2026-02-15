@@ -25,7 +25,7 @@ Sample earnings PDFs are in the `samples/` folder for testing.
 | `ANTHROPIC_API_KEY` | Yes | — | Anthropic API key for Claude |
 | `APP_PASSWORD` | No | — | If set, enables password login |
 | `APP_SECRET` | No | `APP_PASSWORD` | Secret for signing session cookies |
-| `MAX_FILE_SIZE_MB` | No | `20` | Max upload size per file |
+| `NEXT_PUBLIC_MAX_FILE_SIZE_MB` | No | `20` | Max upload size per file |
 
 ## Approach
 
