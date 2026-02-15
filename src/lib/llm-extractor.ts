@@ -14,17 +14,17 @@ Return ONLY valid JSON matching this schema, with no other text:
   "company_name": string | null,
   "quarter": string | null,
   "total_revenue": string | null,
-  "earnings_per_share": number | null,
+  "earnings_per_share": string | null,
   "net_income": string | null,
   "operating_income": string | null,
-  "gross_margin": number | null,
+  "gross_margin": string | null,
   "operating_expenses": string | null,
   "buybacks_and_dividends": string | null
 }
 
 Notes:
-- For earnings_per_share, use the GAAP diluted EPS as a number (e.g., 1.59).
-- For gross_margin, express as a decimal between 0 and 1 (e.g., 0.505 for 50.5%). If gross margin is not explicitly stated, calculate it as (total revenue - cost of sales) / total revenue.
+- For earnings_per_share, format as a dollar string (e.g., "$1.59"). Use the GAAP diluted EPS.
+- For gross_margin, format as a percentage string (e.g., "50.5%"). If gross margin is not explicitly stated, calculate it as (total revenue - cost of sales) / total revenue.
 - For buybacks_and_dividends, combine both if available (e.g., "$2.0B Buybacks, $0 Dividends"). Use null if neither is mentioned.
 - Use the most recent quarter's data if multiple quarters are shown.
 - For company_name, use the common company name (e.g., "Amazon.com, Inc.", "Tesla, Inc."), not ticker symbols.
@@ -34,10 +34,10 @@ Example output for Amazon Q1 2025 (net sales $155.7B, cost of sales $77.0B, so g
   "company_name": "Amazon.com, Inc.",
   "quarter": "Q1 2025",
   "total_revenue": "$155.7B",
-  "earnings_per_share": 1.59,
+  "earnings_per_share": "$1.59",
   "net_income": "$17.1B",
   "operating_income": "$18.4B",
-  "gross_margin": 0.505,
+  "gross_margin": "50.5%",
   "operating_expenses": "$137.3B",
   "buybacks_and_dividends": null
 }`;
@@ -59,40 +59,6 @@ function needsFallback(data: ExtractedData): boolean {
     (f) => data[f] === null || data[f] === undefined
   ).length;
   return nullCount >= 4;
-}
-
-function normalizeNumericField(value: unknown): number | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value === "number") return value;
-  if (typeof value === "string") {
-    // Strip dollar signs, commas, whitespace
-    const cleaned = value.replace(/[$,\s]/g, "").trim();
-    if (cleaned === "") return null;
-    // Handle percentage strings like "46%" → 0.46
-    if (cleaned.endsWith("%")) {
-      const num = parseFloat(cleaned.slice(0, -1));
-      return isNaN(num) ? null : num / 100;
-    }
-    const num = parseFloat(cleaned);
-    return isNaN(num) ? null : num;
-  }
-  return null;
-}
-
-function normalizeExtraction(raw: ExtractedData): ExtractedData {
-  const data = { ...raw };
-
-  // EPS: ensure plain number, strip $ if present
-  data.earnings_per_share = normalizeNumericField(data.earnings_per_share);
-
-  // Gross margin: ensure decimal 0-1, convert from percentage if needed
-  let gm = normalizeNumericField(data.gross_margin);
-  if (gm !== null && gm > 1) {
-    gm = gm / 100;
-  }
-  data.gross_margin = gm;
-
-  return data;
 }
 
 function parseResponse(response: Anthropic.Message): ExtractedData {
@@ -120,7 +86,7 @@ function parseResponse(response: Anthropic.Message): ExtractedData {
     }
   }
 
-  return normalizeExtraction(parsed);
+  return parsed;
 }
 
 function handleAPIError(error: unknown): never {

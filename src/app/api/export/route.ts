@@ -33,12 +33,6 @@ export async function POST(request: NextRequest) {
     const dataCols = COLUMNS.map((c) => {
       const val = row.data[c.key];
       if (val === null || val === undefined) return "";
-      if (c.key === "earnings_per_share" && typeof val === "number") {
-        return `$${val.toFixed(2)}`;
-      }
-      if (c.key === "gross_margin" && typeof val === "number") {
-        return `${Math.round(val * 100)}%`;
-      }
       return escapeCSV(String(val));
     });
 

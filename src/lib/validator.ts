@@ -35,18 +35,27 @@ export function validateExtraction(data: ExtractedData): ValidationResult {
   if (!data.company_name) errors.push("Missing company name");
   if (!data.quarter) errors.push("Missing quarter");
 
-  // Gross margin range
-  if (data.gross_margin !== null && data.gross_margin !== undefined) {
-    if (data.gross_margin < 0 || data.gross_margin > 1) {
+  // Gross margin range — parse string like "50.5%" or "0.505"
+  if (data.gross_margin) {
+    const gmStr = data.gross_margin.trim();
+    let gm: number | null = null;
+    if (gmStr.endsWith("%")) {
+      gm = parseFloat(gmStr.slice(0, -1));
+      if (!isNaN(gm)) gm = gm / 100;
+    } else {
+      gm = parseFloat(gmStr);
+    }
+    if (gm !== null && !isNaN(gm) && (gm < 0 || gm > 1)) {
       warnings.push(
-        `Gross margin ${data.gross_margin} outside expected range 0-1`
+        `Gross margin ${data.gross_margin} outside expected range 0-100%`
       );
     }
   }
 
-  // EPS sanity
-  if (data.earnings_per_share !== null && data.earnings_per_share !== undefined) {
-    if (Math.abs(data.earnings_per_share) > 100) {
+  // EPS sanity — parse string like "$1.59" or "1.59"
+  if (data.earnings_per_share) {
+    const epsNum = parseFloat(data.earnings_per_share.replace(/[$,\s]/g, ""));
+    if (!isNaN(epsNum) && Math.abs(epsNum) > 100) {
       warnings.push(
         `EPS of ${data.earnings_per_share} seems unusually high`
       );

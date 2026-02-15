@@ -33,11 +33,6 @@ const FIELD_LABELS: { key: keyof ExtractedData; label: string }[] = [
   { key: "buybacks_and_dividends", label: "Buybacks & Dividends" },
 ];
 
-const NUMERIC_FIELDS: Set<keyof ExtractedData> = new Set([
-  "earnings_per_share",
-  "gross_margin",
-]);
-
 const MAX_FILE_SIZE_MB = 20;
 const MAX_FILES_PER_REQUEST = 10;
 const CONCURRENCY = 5;
@@ -68,12 +63,8 @@ function friendlyError(msg: string): string {
   return cleaned || "Extraction failed";
 }
 
-function formatValue(key: keyof ExtractedData, value: unknown) {
+function formatValue(_key: keyof ExtractedData, value: unknown) {
   if (value === null || value === undefined) return "N/A";
-  if (key === "earnings_per_share" && typeof value === "number")
-    return `$${value.toFixed(2)}`;
-  if (key === "gross_margin" && typeof value === "number")
-    return `${Math.round(value * 100)}%`;
   return String(value);
 }
 
@@ -252,9 +243,7 @@ export default function Home() {
     const res = await fetch("/api/export", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        results.map((r) => ({ data: r.data, validation: r.validation }))
-      ),
+      body: JSON.stringify(results.map((r) => ({ data: r.data }))),
     });
 
     const blob = await res.blob();
@@ -275,9 +264,6 @@ export default function Home() {
 
       if (raw.trim() === "") {
         row.data[field] = null as never;
-      } else if (NUMERIC_FIELDS.has(field)) {
-        const num = parseFloat(raw);
-        row.data[field] = (isNaN(num) ? raw : num) as never;
       } else {
         row.data[field] = raw as never;
       }
