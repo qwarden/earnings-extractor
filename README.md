@@ -26,8 +26,6 @@ Sample earnings PDFs are in the `samples/` folder for testing.
 | `APP_PASSWORD` | No | — | If set, enables password login |
 | `APP_SECRET` | No | `APP_PASSWORD` | Secret for signing session cookies |
 | `MAX_FILE_SIZE_MB` | No | `20` | Max upload size per file |
-| `MAX_FILES_PER_REQUEST` | No | `10` | Max files per upload batch |
-| `MAX_CONCURRENT_EXTRACTIONS` | No | `3` | Concurrent Claude API calls |
 
 ## Approach
 
@@ -59,8 +57,7 @@ Next.js App (TypeScript, Tailwind CSS)
 ├── Core
 │   ├── pdf-parser.ts    — pdf-parse text extraction
 │   ├── llm-extractor.ts — Claude API with text→vision fallback
-│   ├── validator.ts     — financial data sanity checks
-│   └── concurrency.ts   — worker pool for batch processing
+│   └── validator.ts     — financial data sanity checks
 └── Proxy (proxy.ts)
     └── Auth guard (redirects unauthenticated users)
 ```
