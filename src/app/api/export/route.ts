@@ -48,7 +48,8 @@ export async function POST(request: NextRequest) {
   const csv = [header, ...csvRows].join("\n");
 
   const date = new Date().toISOString().slice(0, 10);
-  const filename = `earnings_data_${date}.csv`;
+  const id = Math.random().toString(36).slice(2, 6);
+  const filename = `earnings_data_${date}_${id}.csv`;
 
   return new NextResponse(csv, {
     headers: {
