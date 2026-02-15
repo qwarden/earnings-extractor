@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isValidSession, isAuthEnabled, COOKIE_NAME } from "@/lib/auth";
-import { checkRateLimit } from "@/lib/rate-limit";
 
 const PUBLIC_PATHS = ["/login", "/api/auth"];
 
@@ -46,26 +45,6 @@ export async function proxy(request: NextRequest) {
       if (valid) {
         return NextResponse.redirect(new URL("/", request.url));
       }
-    }
-  }
-
-  // Rate limiting for extract endpoint
-  if (pathname === "/api/extract") {
-    const ip =
-      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      request.headers.get("x-real-ip") ||
-      "unknown";
-    const result = checkRateLimit(ip);
-
-    if (!result.allowed) {
-      const retryAfterSeconds = Math.ceil((result.retryAfterMs || 0) / 1000);
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        {
-          status: 429,
-          headers: { "Retry-After": String(retryAfterSeconds) },
-        }
-      );
     }
   }
 
