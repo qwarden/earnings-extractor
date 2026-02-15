@@ -51,7 +51,7 @@ Next.js App (TypeScript, Tailwind CSS)
 │   ├── Result cards (editable fields, validation badges)
 │   └── CSV export
 ├── API Routes
-│   ├── POST /api/extract — accepts PDFs, returns extracted JSON
+│   ├── POST /api/extract — accepts a PDF, returns extracted JSON
 │   ├── POST /api/export  — accepts JSON, returns CSV
 │   └── POST/DELETE /api/auth — session management
 ├── Core
@@ -87,14 +87,3 @@ Next.js App (TypeScript, Tailwind CSS)
 - **More validation**: Cross-check relationships between fields (e.g., operating income should be less than revenue, operating expenses + operating income should roughly equal revenue). Flag extractions that don't pass basic accounting identities.
 
 - **Per-company prompt tuning**: Different companies present data differently. With enough examples, you could detect the company format and use a tailored prompt.
-
-## Open Questions
-
-Things I'd want to clarify before building further:
-
-- **How many people will use this, and how often?** A small team uploading a few PDFs a week is a very different product than multiple teams processing hundreds. Affects whether in-memory storage is fine or if we need a real database, job queue, etc.
-- **Where does this get deployed?** Their own servers, a cloud provider, someone's machine? Determines how much infrastructure work is needed beyond the Docker container.
-- **Is CSV output sufficient, or do they need Excel specifically?** The sample output was an `.xlsx` file. CSV opens in Excel but doesn't support cell formatting, multiple sheets, etc.
-- **How is 90% accuracy measured?** Per field, per file, or overall? Who decides what the "correct" value is? Some fields are ambiguous (e.g., gross margin isn't always stated and has to be calculated).
-- **Any concerns about sending earnings data to an external API?** The tool sends PDF content to Anthropic's Claude API for extraction. If this data is sensitive or pre-release, that might be a compliance issue worth discussing.
-- **Do they need an audit trail?** Who extracted what, when, and what edits were made before export. Important for finance teams in regulated environments.
