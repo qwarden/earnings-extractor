@@ -78,12 +78,8 @@ Next.js App (TypeScript, Tailwind CSS)
 
 ## What I'd Do With More Time
 
-- **Accuracy benchmarking**: Run the tool against all sample PDFs, compare output to manually verified values, and measure field-level accuracy. This is how I'd prove the 90% target and identify which fields need prompt tuning.
-
 - **Confidence scoring**: Have the LLM flag fields it's uncertain about so the UI can highlight them for manual review. Right now every field looks the same whether the model is confident or guessing.
 
 - **Full result persistence**: Completed results survive a reload via localStorage, but there's no durable storage. A simple database (SQLite or similar) would let users come back to previous extractions across sessions and devices.
 
 - **More validation**: Cross-check relationships between fields (e.g., operating income should be less than revenue, operating expenses + operating income should roughly equal revenue). Flag extractions that don't pass basic accounting identities.
-
-- **Per-company prompt tuning**: Different companies present data differently. With enough examples, you could detect the company format and use a tailored prompt.
