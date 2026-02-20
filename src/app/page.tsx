@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ExtractedData, ValidationResult } from "@/lib/types";
+import { FIELDS, MAX_FILE_SIZE_MB, MAX_FILES_PER_REQUEST } from "@/lib/constants";
 
 interface ResultRow {
   id: string;
@@ -22,20 +23,6 @@ interface EditingCell {
   field: keyof ExtractedData;
 }
 
-const FIELD_LABELS: { key: keyof ExtractedData; label: string }[] = [
-  { key: "company_name", label: "Company Name" },
-  { key: "quarter", label: "Quarter" },
-  { key: "total_revenue", label: "Total Revenue" },
-  { key: "earnings_per_share", label: "EPS" },
-  { key: "net_income", label: "Net Income" },
-  { key: "operating_income", label: "Operating Income" },
-  { key: "gross_margin", label: "Gross Margin" },
-  { key: "operating_expenses", label: "Operating Expenses" },
-  { key: "buybacks_and_dividends", label: "Buybacks & Dividends" },
-];
-
-const MAX_FILE_SIZE_MB = parseInt(process.env.NEXT_PUBLIC_MAX_FILE_SIZE_MB || "20", 10);
-const MAX_FILES_PER_REQUEST = 10;
 const RESULTS_KEY = "extractionResults";
 const PROGRESS_KEY = "extractionProgress";
 
@@ -510,17 +497,17 @@ export default function Home() {
 
                   {/* Card body — two-column label/value grid */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0">
-                    {FIELD_LABELS.map((f, fi) => {
+                    {FIELDS.map((f, fi) => {
                       const isEditing =
                         editing?.row === i && editing?.field === f.key;
                       return (
                         <div
                           key={f.key}
                           className={`flex justify-between items-center px-5 py-2.5 text-sm ${
-                            fi < FIELD_LABELS.length - 1
+                            fi < FIELDS.length - 1
                               ? "sm:border-b border-gray-100"
                               : ""
-                          } ${fi % 2 === 0 && fi < FIELD_LABELS.length - 1 ? "sm:border-r border-gray-100" : ""}`}
+                          } ${fi % 2 === 0 && fi < FIELDS.length - 1 ? "sm:border-r border-gray-100" : ""}`}
                         >
                           <span className="text-gray-500 shrink-0 mr-3">
                             {f.label}

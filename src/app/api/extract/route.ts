@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractFromPDF } from "@/lib/llm-extractor";
 import { validateExtraction } from "@/lib/validator";
+import { MAX_FILE_SIZE_MB } from "@/lib/constants";
 
-const MAX_FILE_SIZE = parseInt(process.env.NEXT_PUBLIC_MAX_FILE_SIZE_MB || "20", 10) * 1024 * 1024;
+const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
 
   if (file.size > MAX_FILE_SIZE) {
     return NextResponse.json(
-      { error: `"${file.name}" exceeds ${MAX_FILE_SIZE / (1024 * 1024)}MB limit` },
+      { error: `"${file.name}" exceeds ${MAX_FILE_SIZE_MB}MB limit` },
       { status: 400 }
     );
   }

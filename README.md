@@ -25,7 +25,7 @@ Sample earnings PDFs are in the `samples/` folder for testing.
 | `ANTHROPIC_API_KEY` | Yes | — | Anthropic API key for Claude |
 | `APP_PASSWORD` | No | — | If set, enables password login |
 | `APP_SECRET` | No | `APP_PASSWORD` | Secret for signing session cookies |
-| `NEXT_PUBLIC_MAX_FILE_SIZE_MB` | No | `20` | Max upload size per file |
+| `CLAUDE_MODEL` | No | `claude-sonnet-4-20250514` | Claude model used for extraction |
 
 ## Approach
 
@@ -76,7 +76,7 @@ Next.js App (TypeScript, Tailwind CSS)
 
 - **Per-file progress tracking**: Extraction takes 10–30 seconds per file, so each file shows its own status rather than a single spinner for the whole batch. Up to 5 files process concurrently.
 
-- **Retry with backoff on rate limits**: Claude API calls automatically retry up to 3 times with increasing delays (15s, 30s, 45s) when a 429 is returned. This matters because vision-based PDF processing is token-heavy and can hit API rate limits mid-batch. If you're processing large batches frequently, you can request a higher rate limit via the [Anthropic Console](https://console.anthropic.com/) under Settings → Limits. Limits scale with usage tier, which increases automatically with cumulative spend.
+- **Retry with backoff on rate limits**: Claude API calls automatically retry up to 3 times with increasing delays (15s, 30s, 45s) when a 429 is returned. This matters because vision-based PDF processing is token-heavy and can hit API rate limits mid-batch.
 
 - **Friendly error surfacing**: Server-side errors (rate limits, API failures) are translated into plain-language messages shown next to the file that failed, rather than only appearing in server logs.
 
