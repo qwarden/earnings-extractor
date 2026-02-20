@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ExtractedData, ValidationResult } from "@/lib/types";
 
 interface ResultRow {
+  id: string;
   filename: string;
   data: ExtractedData;
   validation?: ValidationResult;
@@ -74,6 +75,8 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [editing, setEditing] = useState<EditingCell | null>(null);
+  const [newIds, setNewIds] = useState<Set<string>>(new Set());
+  const newIdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -81,7 +84,10 @@ export default function Home() {
   useEffect(() => {
     try {
       const savedResults = localStorage.getItem(RESULTS_KEY);
-      if (savedResults) setResults(JSON.parse(savedResults));
+      if (savedResults) {
+        const parsed: ResultRow[] = JSON.parse(savedResults);
+        setResults(parsed.map((r) => ({ ...r, id: r.id ?? crypto.randomUUID() })));
+      }
     } catch {}
 
     try {
@@ -128,7 +134,7 @@ export default function Home() {
   );
 
   const processOneFile = useCallback(
-    async (file: File, index: number): Promise<ResultRow | null> => {
+    async (file: File, index: number, id: string): Promise<ResultRow | null> => {
       const formData = new FormData();
       formData.append("files", file);
 
@@ -149,9 +155,11 @@ export default function Home() {
           return null;
         }
 
-        const rows: ResultRow[] = await res.json();
+        const rows: { filename: string; data: ExtractedData; validation?: ValidationResult }[] = await res.json();
+        const row = rows[0];
+        if (!row) return null;
         updateFileProgress(index, { status: "done" });
-        return rows[0] ?? null;
+        return { ...row, id };
       } catch {
         updateFileProgress(index, { status: "error", error: "Request failed" });
         return null;
@@ -194,18 +202,29 @@ export default function Home() {
       setFileProgress(progress);
       saveProgress(progress);
 
-      const newResults = await Promise.all(
-        pdfFiles.map((file, i) => processOneFile(file, i))
+      const fileIds = pdfFiles.map(() => crypto.randomUUID());
+      const successfulIds: string[] = [];
+
+      await Promise.all(
+        pdfFiles.map(async (file, i) => {
+          const result = await processOneFile(file, i, fileIds[i]);
+          if (result) {
+            successfulIds.push(result.id);
+            setResults((prev) => {
+              const next = [result, ...prev];
+              saveResults(next);
+              return next;
+            });
+          }
+        })
       );
 
-      const successful = newResults.filter(
-        (r): r is ResultRow => r !== null
-      );
-      setResults((prev) => {
-        const next = [...prev, ...successful];
-        saveResults(next);
-        return next;
-      });
+      if (successfulIds.length > 0) {
+        const idSet = new Set(successfulIds);
+        setNewIds(idSet);
+        if (newIdTimerRef.current) clearTimeout(newIdTimerRef.current);
+        newIdTimerRef.current = setTimeout(() => setNewIds(new Set()), 4000);
+      }
 
       setFileProgress((prev) => {
         const failed = prev.filter((fp) => fp.status === "error");
@@ -448,8 +467,15 @@ export default function Home() {
                           : "bg-gray-50 border-gray-200"
                     }`}
                   >
-                    <span className="text-sm font-medium text-gray-700 truncate">
-                      {row.filename}
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm font-medium text-gray-700 truncate">
+                        {row.filename}
+                      </span>
+                      {newIds.has(row.id) && (
+                        <span className="shrink-0 text-xs font-semibold text-green-700 bg-green-100 rounded-full px-2 py-0.5">
+                          New
+                        </span>
+                      )}
                     </span>
                     {v && (hasErrors || hasWarnings) ? (
                       <details className="cursor-pointer">

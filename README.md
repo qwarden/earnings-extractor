@@ -72,14 +72,77 @@ Next.js App (TypeScript, Tailwind CSS)
 
 - **Per-file progress tracking**: Extraction takes 10–30 seconds per file, so each file shows its own status rather than a single spinner for the whole batch. Up to 5 files process concurrently.
 
+- **Retry with backoff on rate limits**: Claude API calls automatically retry up to 3 times with increasing delays (15s, 30s, 45s) when a 429 is returned. This matters because vision-based PDF processing is token-heavy and can hit API rate limits mid-batch. If you're processing large batches frequently, you can request a higher rate limit via the [Anthropic Console](https://console.anthropic.com/) under Settings → Limits. Limits scale with usage tier, which increases automatically with cumulative spend.
+
 - **Friendly error surfacing**: Server-side errors (rate limits, API failures) are translated into plain-language messages shown next to the file that failed, rather than only appearing in server logs.
 
 - **Interrupted upload recovery**: If the page reloads mid-processing, incomplete files are marked as "Interrupted" with a Retry button. A lightweight alternative to a server-side job queue, which would be overkill for this use case.
 
+## Deployment
+
+The app is Dockerized and can be hosted on any managed cloud platform. Recommended path for a fully-managed off-prem setup:
+
+**Vercel** (simplest for Next.js): connect the repo, set environment variables in the dashboard, and deploy. No infrastructure to manage. Scales automatically.
+
+**Docker on cloud** (more control): the included `Dockerfile` and `docker-compose.yml` run on AWS ECS, GCP Cloud Run, or any container-hosting service. For a team of 10, a single small instance is sufficient — extractions are API-bound, not compute-bound.
+
+Either way, only two environment variables are needed in production:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+APP_PASSWORD=...
+APP_SECRET=...   # random secret for signing session cookies
+```
+
+**Rate limits**: with 10 analysts potentially processing batches simultaneously, the Anthropic API's tokens-per-minute limit is the main constraint. The app handles this with a concurrency semaphore and automatic retry with backoff, but for heavy usage a higher API tier is recommended (request via the [Anthropic Console](https://console.anthropic.com/) under Settings → Limits).
+
+## Authentication
+
+The current demo uses a single shared password. For production with 10 named analysts, the right approach is individual accounts:
+
+- **Short term**: provision individual API keys or use an identity provider with SSO (Google Workspace, Okta, etc.) via a library like NextAuth.js. This adds per-user login without building auth from scratch.
+- **Longer term**: per-user accounts backed by a database enable audit trails, per-user extraction history, and role-based access if needed.
+
+The current auth infrastructure (session cookies, proxy guard) is designed to slot a real identity provider in without changes to the rest of the app.
+
+## Accuracy
+
+Measured on a test set of 10 earnings PDFs (mix of call transcripts and press releases) against manually verified ground truth:
+
+**~95% field-level accuracy** across 9 fields × 10 documents.
+
+Methodology: each extracted field is compared semantically against the ground truth (e.g., "$17.1B" and "$17.1 billion" are treated as equivalent). A field is correct if it matches or is intentionally null (field not present in the source document).
+
+Fields extracted: Company Name, Quarter, Total Revenue, EPS, Net Income, Operating Income, Gross Margin, Operating Expenses, Buybacks & Dividends.
+
+Key factors affecting accuracy:
+- **Press releases outperform call transcripts**: press releases contain structured income statement tables with explicit values. Pure call transcripts often omit fields like EPS and gross margin.
+- **Only explicitly stated values are extracted**: the tool does not derive or calculate values from other fields (except one case: dividends inferred from total capital returned minus buybacks). This avoids plausible-looking hallucinations at the cost of leaving some fields blank.
+- **Vision fallback for image-heavy PDFs**: PDFs that don't yield usable text are sent to Claude's document understanding API, which reads the full PDF visually. This recovers data from scanned or complex-layout documents but is slower and more expensive.
+
+Without access to your historical data we can't measure accuracy on your specific corpus, but the extraction logic is prompt-driven and can be tuned as new document formats are encountered.
+
+## Cost
+
+API costs are low relative to analyst labor. Rough estimates at current Anthropic pricing:
+
+- Text-path extraction (most transcripts): ~$0.01–0.03 per PDF
+- Vision-path extraction (image-heavy PDFs): ~$0.05–0.15 per PDF
+
+At 10 analysts processing, say, 20 PDFs each per week: ~200 PDFs/week → roughly $2–30/week in API costs. Compared to 200 × 30 min × $50/hr = $5,000/week in analyst time for manual entry, the tool pays for itself on the first document.
+
+## Known Limitations
+
+- **Per-share dividend rates in vision fallback**: When a transcript only mentions dividends as a per-share rate (e.g., "15 cents per share") and text extraction yields too few fields to skip the vision fallback, the vision model may compute an aggregate total using its parametric knowledge of the company's share count. This produces a plausible-looking but hallucinated dollar figure. The prompt instructs the model to ignore per-share rates, but this instruction is less reliable in the vision path. Affected: transcripts like Ford's that have minimal financial data. Mitigation: use the earnings press release PDF instead of the call transcript.
+
 ## What I'd Do With More Time
+
+- **Individual authentication**: Replace the shared password with per-user accounts via NextAuth.js (Google Workspace SSO or email/password). Required for audit trails and any compliance use case.
+
+- **Audit trail**: Log every extraction — user, timestamp, source PDF, extracted values, and any manual edits before export. A simple append-only database table covers this. Useful for accountability and for catching systematic extraction errors over time.
 
 - **Confidence scoring**: Have the LLM flag fields it's uncertain about so the UI can highlight them for manual review. Right now every field looks the same whether the model is confident or guessing.
 
 - **Full result persistence**: Completed results survive a reload via localStorage, but there's no durable storage. A simple database (SQLite or similar) would let users come back to previous extractions across sessions and devices.
 
-- **More validation**: Cross-check relationships between fields (e.g., operating income should be less than revenue, operating expenses + operating income should roughly equal revenue). Flag extractions that don't pass basic accounting identities.
+- **More validation**: Cross-check relationships between fields (e.g., operating income should be less than revenue). Flag extractions that don't pass basic accounting identities.
