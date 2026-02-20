@@ -58,6 +58,7 @@ Next.js App (TypeScript, Tailwind CSS)
 │   ├── pdf-parser.ts        — pdf-parse text extraction
 │   ├── llm-extractor.ts     — Claude API with text→vision fallback
 │   ├── validator.ts         — financial data sanity checks
+│   ├── constants.ts         — shared field definitions and upload limits
 │   └── prompts/extraction.ts — LLM extraction prompt
 ├── Middleware (middleware.ts)
 │   └── Auth guard (redirects unauthenticated users)
