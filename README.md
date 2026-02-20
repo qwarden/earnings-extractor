@@ -67,6 +67,16 @@ Next.js App (TypeScript, Tailwind CSS)
     └── ground-truth.csv — manually verified extraction results for 10 sample PDFs
 ```
 
+## Technology Choices
+
+- **Next.js**: Handles both the frontend and API routes in a single codebase with no separate backend service to run. Server-side API routes are necessary here — PDF buffers and API keys can't touch the browser. The App Router's file-based routing made adding auth middleware and API endpoints straightforward. It also has a first-class Docker deployment story via `output: "standalone"`.
+
+- **TypeScript**: The extraction schema is a fixed contract between the LLM prompt, the API response, and the CSV export. TypeScript makes that contract explicit and catches mismatches at compile time rather than at runtime in production.
+
+- **Tailwind CSS**: Fast to iterate on for a tool-style UI with no custom design system needed. Keeps all styling co-located with the components rather than spread across separate CSS files.
+
+- **Docker**: The problem statement asks for an off-prem deployment. Docker gives the client a single `docker compose up` command with no dependency on a specific cloud provider, Node version, or local environment.
+
 ## Product Decisions
 
 - **Inline editing before export**: LLM extraction won't be 100% accurate. Rather than forcing users to fix things in Excel after the fact, they can click any value and correct it in the browser before exporting. This felt important given the client's team is currently doing manual data entry — the tool should reduce their work, not create a different kind of it.
