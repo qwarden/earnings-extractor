@@ -85,7 +85,7 @@ Next.js App (TypeScript, Tailwind CSS)
 
 - **Password auth**: The problem statement mentions a single client team. A shared password is appropriate for that scope.
 
-- **Per-file progress tracking**: Extraction takes 10–30 seconds per file, so each file shows its own status rather than a single spinner for the whole batch. Up to 5 files process concurrently.
+- **Per-file progress tracking**: Extraction takes 10–30 seconds per file, so each file shows its own status rather than a single spinner for the whole batch. Up to 10 files can be uploaded at once; all kick off in parallel with concurrency managed server-side by a semaphore (3 text extractions, 1 vision extraction at a time).
 
 - **Retry with backoff on rate limits**: Claude API calls automatically retry up to 3 times with increasing delays (15s, 30s, 45s) when a 429 is returned. This matters because vision-based PDF processing is token-heavy and can hit API rate limits mid-batch.
 
