@@ -60,7 +60,7 @@ Next.js App (TypeScript, Tailwind CSS)
 │   ├── validator.ts         — financial data sanity checks
 │   ├── constants.ts         — shared field definitions and upload limits
 │   └── prompts/extraction.ts — LLM extraction prompt
-├── Middleware (middleware.ts)
+├── Proxy (proxy.ts)
 │   └── Auth guard (redirects unauthenticated users)
 └── scripts/
     ├── verify.py        — accuracy verification against ground truth
@@ -108,7 +108,7 @@ The current demo uses a single shared password. For production with 10 named ana
 - **Short term**: provision individual API keys or use an identity provider with SSO (Google Workspace, Okta, etc.) via a library like NextAuth.js. This adds per-user login without building auth from scratch.
 - **Longer term**: per-user accounts backed by a database enable audit trails, per-user extraction history, and role-based access if needed.
 
-The current auth infrastructure (session cookies, proxy guard) is designed to slot a real identity provider in without changes to the rest of the app.
+The current auth infrastructure (session cookies, proxy middleware) is designed to slot a real identity provider in without changes to the rest of the app.
 
 ## Accuracy
 
