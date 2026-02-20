@@ -55,11 +55,15 @@ Next.js App (TypeScript, Tailwind CSS)
 │   ├── POST /api/export  — accepts JSON, returns CSV
 │   └── POST/DELETE /api/auth — session management
 ├── Core
-│   ├── pdf-parser.ts    — pdf-parse text extraction
-│   ├── llm-extractor.ts — Claude API with text→vision fallback
-│   └── validator.ts     — financial data sanity checks
-└── Proxy (proxy.ts)
-    └── Auth guard (redirects unauthenticated users)
+│   ├── pdf-parser.ts        — pdf-parse text extraction
+│   ├── llm-extractor.ts     — Claude API with text→vision fallback
+│   ├── validator.ts         — financial data sanity checks
+│   └── prompts/extraction.ts — LLM extraction prompt
+├── Middleware (middleware.ts)
+│   └── Auth guard (redirects unauthenticated users)
+└── scripts/
+    ├── verify.py        — accuracy verification against ground truth
+    └── ground-truth.csv — manually verified extraction results for 10 sample PDFs
 ```
 
 ## Product Decisions
